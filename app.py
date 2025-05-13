@@ -28,7 +28,7 @@ st.markdown("Upload recent weather data to predict rainfall using a trained LSTM
 
 @st.cache_resource
 def load_lstm_model():
-    return load_model("/content/drive/MyDrive/rainfall.h5")
+    return load_model("rainfall.h5")
 
 model = load_lstm_model()
 
