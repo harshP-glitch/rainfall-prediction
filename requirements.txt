@@ -7,4 +7,5 @@ tensorflow
 keras
 scikit-learn
 Joblib
+sklearn
 
