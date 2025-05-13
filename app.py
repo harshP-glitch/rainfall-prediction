@@ -7,6 +7,8 @@ Original file is located at
     https://colab.research.google.com/drive/14hULln8nG1Jr8ZA8-VxTiORVqSzXjktf
 """
 
+
+
 # app.py
 
 import streamlit as st
@@ -26,7 +28,7 @@ st.markdown("Upload recent weather data to predict rainfall using a trained LSTM
 
 @st.cache_resource
 def load_lstm_model():
-    return load_model("/content/drive/MyDrive/rainfall_lstm_model (1).h5")
+    return load_model("/content/drive/MyDrive/rainfall.h5")
 
 model = load_lstm_model()
 
