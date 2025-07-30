@@ -27,12 +27,11 @@ st.markdown("Analyze historical rainfall data and explore future forecasts inter
 
 # User input
 st.sidebar.header("🔍 Forecast Parameters")
-city = st.sidebar.selectbox("Select City", data['City'].unique())
+
 months = st.sidebar.slider("Months to Predict", min_value=1, max_value=24, value=6)
 
 # Filter data
-city_data = data[data['City'] == city].copy()
-city_data = city_data.sort_values(by='Date')
+
 
 # Display historical data
 st.subheader(f"📊 Historical Rainfall in {city}")
