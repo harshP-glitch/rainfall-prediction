@@ -15,7 +15,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Load model
-model = joblib.load("rainfall_model.pkl")
+model = joblib.load("rainfall_model.h5")
 
 # Define preprocessing pipeline
 def preprocess(df):
