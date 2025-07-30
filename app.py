@@ -25,7 +25,7 @@ st.markdown("Upload recent weather data (CSV format) to predict upcoming rainfal
 def load_all_components():
     model = load_model("rainfall.h5")
     feature_scaler = joblib.load("feature_scaler.pkl")
-    target_scaler = joblib.load("target_scaler.pkl")
+    target_scaler = joblib.load("target_scaler (1).pkl")
     features = joblib.load("features.pkl")
     return model, feature_scaler, target_scaler, features
 
