@@ -10,120 +10,71 @@ Original file is located at
 
 import streamlit as st
 import pandas as pd
+import joblib
 import numpy as np
-from sklearn.preprocessing import MinMaxScaler
-from tensorflow.keras.models import load_model
-from datetime import datetime
 import matplotlib.pyplot as plt
 
-# --------------------- SETUP ---------------------
+# Load model
+model = joblib.load("rainfall_model.pkl")
 
+# Define preprocessing pipeline
+def preprocess(df):
+    if 'Rainfall(mm)' in df.columns:
+        df.rename(columns={'Rainfall(mm)': 'rainfall'}, inplace=True)
+
+    if 'rainfall' not in df.columns:
+        raise ValueError("Expected column 'rainfall' not found.")
+
+    df['rainfall'] = df['rainfall'].fillna(method='ffill')
+    df['rainfall_lag_1'] = df['rainfall'].shift(1)
+    df.dropna(inplace=True)
+    return df
+
+# Streamlit UI
 st.set_page_config(page_title="Rainfall Prediction", layout="centered")
-st.title("🌧️ Rainfall Prediction using LSTM")
-st.markdown("Upload recent weather data to predict rainfall using a trained LSTM model.")
+st.title("🌧️ Rainfall Prediction App")
+st.markdown("Upload your rainfall data file to see the predictions 📊")
 
-# --------------------- MODEL LOAD ---------------------
+uploaded_file = st.file_uploader("📂 Upload CSV file", type="csv")
 
-@st.cache_resource
-def load_lstm_model():
-    return load_model("rainfall.h5")
+if uploaded_file is not None:
+    try:
+        # Load and preprocess
+        raw_df = pd.read_csv(uploaded_file)
+        processed_df = preprocess(raw_df)
 
-model = load_lstm_model()
+        # Predict
+        predictions = model.predict(processed_df[["rainfall_lag_1"]])
+        processed_df['Predicted_Rainfall'] = predictions
 
-# --------------------- FILE UPLOAD ---------------------
+        # Show table
+        st.subheader("📋 Predicted Rainfall Results")
+        st.dataframe(processed_df[['rainfall', 'rainfall_lag_1', 'Predicted_Rainfall']])
 
-uploaded_file = st.file_uploader("📤 Upload your CSV file", type=["csv"])
+        # Show summary
+        avg_actual = round(processed_df['rainfall'].mean(), 2)
+        avg_pred = round(processed_df['Predicted_Rainfall'].mean(), 2)
 
-if uploaded_file:
-    recent_df = pd.read_csv(uploaded_file)
+        st.markdown(f"""
+        ### 📈 Summary:
+        - **Average Actual Rainfall:** {avg_actual} mm  
+        - **Average Predicted Rainfall:** {avg_pred} mm
+        """)
 
-    # --------------------- DATA PREP ---------------------
-
-    # Convert 'date' column to datetime if exists
-    if 'date' in recent_df.columns:
-        recent_df['date'] = pd.to_datetime(recent_df['date'])
-        recent_df.set_index('date', inplace=True)
-    else:
-        recent_df.index = pd.date_range(start=datetime.today(), periods=len(recent_df), freq='D')
-
-    for col in ['rainfall', 'humidity', 'windspeed', 'temparature', 'cloud']:
-        if col in recent_df.columns:
-            recent_df[col] = pd.to_numeric(recent_df[col], errors='coerce')
-
-    # Feature Engineering
-    recent_df["rainfall_lag_1"] = recent_df["rainfall"].shift(1)
-    recent_df["rainfall_lag_3"] = recent_df["rainfall"].shift(3)
-    recent_df["rainfall_lag_7"] = recent_df["rainfall"].shift(7)
-    recent_df["humidity_lag_1"] = recent_df["humidity"].shift(1)
-    recent_df["windspeed_lag_1"] = recent_df["windspeed"].shift(1)
-    recent_df["temparature_lag_1"] = recent_df["temparature"].shift(1)
-
-    recent_df["rainfall_rolling_3"] = recent_df["rainfall"].rolling(window=3).mean()
-    recent_df["humidity_rolling_3"] = recent_df["humidity"].rolling(window=3).mean()
-    recent_df["cloud_rolling_3"] = recent_df["cloud"].rolling(window=3).mean()
-
-    recent_df["month"] = recent_df.index.month
-    recent_df["dayofweek"] = recent_df.index.dayofweek
-
-    recent_df.dropna(inplace=True)
-
-    # Define features
-    features = [
-        "rainfall_lag_1", "rainfall_lag_3", "rainfall_lag_7",
-        "humidity_lag_1", "windspeed_lag_1", "temparature_lag_1",
-        "rainfall_rolling_3", "humidity_rolling_3", "cloud_rolling_3",
-        "month", "dayofweek"
-    ]
-
-    missing_cols = [col for col in features if col not in recent_df.columns]
-    if missing_cols:
-        st.error(f"Missing required columns: {missing_cols}")
-    else:
-        X = recent_df[features]
-
-        scaler = MinMaxScaler()
-        X_scaled = scaler.fit_transform(X)
-
-        prediction_scaled = model.predict(X_scaled)
-        prediction = prediction_scaled.flatten()
-
-        # --------------------- OUTPUT SECTION ---------------------
-
-        # Add predictions and reset index for display
-        recent_df = recent_df.copy()
-        recent_df['Predicted_Rainfall'] = prediction
-        recent_df = recent_df.reset_index()
-        recent_df.rename(columns={
-            'date': 'Date',
-            'rainfall': 'Actual Rainfall (mm)',
-            'Predicted_Rainfall': 'Predicted Rainfall (mm)'
-        }, inplace=True)
-
-        st.subheader("📊 Prediction Output Table")
-        st.dataframe(recent_df[['Date', 'Actual Rainfall (mm)', 'Predicted Rainfall (mm)']].tail(10).round(2))
-
-        # --------------------- PLOT ---------------------
-        st.subheader("📉 Rainfall Trend (Actual vs Predicted)")
-        fig, ax = plt.subplots(figsize=(10, 4))
-        ax.plot(recent_df['Date'], recent_df['Actual Rainfall (mm)'], label='Actual Rainfall', marker='o')
-        ax.plot(recent_df['Date'], recent_df['Predicted Rainfall (mm)'], label='Predicted Rainfall', linestyle='--', marker='x')
-        ax.set_title("Actual vs Predicted Rainfall")
-        ax.set_xlabel("Date")
+        # Line Chart
+        st.subheader("📉 Rainfall Prediction vs Actual")
+        fig, ax = plt.subplots(figsize=(10, 5))
+        ax.plot(processed_df.index, processed_df['rainfall'], label='🌧️ Actual Rainfall', color='blue', linestyle='--')
+        ax.plot(processed_df.index, processed_df['Predicted_Rainfall'], label='🤖 Predicted Rainfall', color='green')
+        ax.set_title('Comparison of Predicted and Actual Rainfall')
+        ax.set_xlabel("Time (Index)")
         ax.set_ylabel("Rainfall (mm)")
         ax.legend()
         ax.grid(True)
+
         st.pyplot(fig)
 
-        # --------------------- SUMMARY ---------------------
-        avg_actual = recent_df['Actual Rainfall (mm)'].mean()
-        avg_pred = recent_df['Predicted Rainfall (mm)'].mean()
+        st.markdown("✅ This graph compares the **real rainfall values** with the **predicted values** over time. It helps identify where the model is doing well and where it might be off.")
 
-        st.markdown(f"""
-        ### 🧠 Summary:
-        - **Average Actual Rainfall**: `{avg_actual:.2f} mm`
-        - **Average Predicted Rainfall**: `{avg_pred:.2f} mm`
-        - ✔️ Use this information to plan field work, irrigation, or prepare for heavy rainfall.
-
-        📌 Predictions are based on patterns from your uploaded weather data.
-        """)
-
+    except Exception as e:
+        st.error(f"❌ Error: {e}")
