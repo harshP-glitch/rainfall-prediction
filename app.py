@@ -14,8 +14,8 @@ import numpy as np
 from tensorflow.keras.models import load_model
 import joblib
 import matplotlib.pyplot as plt
-import seaborn as sns
-import io
+from sklearn.preprocessing import MinMaxScaler
+from datetime import datetime
 
 # Title
 st.title("🌧️ Rainfall Prediction using LSTM")
@@ -24,7 +24,7 @@ st.markdown("Upload recent weather data (CSV format) to predict upcoming rainfal
 # File uploader
 uploaded_file = st.file_uploader("📁 Upload your CSV", type="csv")
 
-# Load model and preprocessors
+# Load model and preprocessing objects
 @st.cache_resource
 def load_all_components():
     model = load_model("rainfall.h5")
@@ -35,60 +35,72 @@ def load_all_components():
 
 model, feature_scaler, target_scaler, features = load_all_components()
 
-# On file upload
+# On upload
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
 
+    # Validate columns
     if not set(features).issubset(df.columns):
         st.error("Uploaded file is missing required input features used during training.")
     else:
-        X = df[features]
-        X_scaled = feature_scaler.transform(X)
-        y_pred_scaled = model.predict(X_scaled)
-        y_pred = target_scaler.inverse_transform(y_pred_scaled).flatten()
+        try:
+            # Preprocess
+            X = df[features]
+            X_scaled = feature_scaler.transform(X)
 
-        df["Predicted_Rainfall"] = y_pred
+            # Predict
+            y_pred_scaled = model.predict(X_scaled)
+            y_pred = target_scaler.inverse_transform(y_pred_scaled).flatten()
 
-        # Show prediction table
-        st.subheader("📊 Predicted Rainfall Data (first 20 rows)")
-        st.dataframe(df[features + ["Predicted_Rainfall"]].head(20))
+            df["Predicted_Rainfall"] = y_pred
 
-        # Visualization: Rainfall with color-coded intensities
-        st.subheader("📈 Rainfall Prediction Trend")
-        fig, ax = plt.subplots(figsize=(12, 5))
+            # Show predictions
+            st.subheader("📊 Predicted Rainfall Data")
+            st.dataframe(df[features + ["Predicted_Rainfall"]].head(20))
 
-        colors = ['#90ee90' if rain < 20 else '#f4d03f' if rain < 50 else '#e74c3c' for rain in y_pred]
+            # Plot
+            st.subheader("📈 Rainfall Prediction Trend")
+            fig, ax = plt.subplots(figsize=(12, 5))
+            ax.plot(y_pred, marker='o', linestyle='-', label="Predicted Rainfall")
 
-        sns.lineplot(x=np.arange(len(y_pred)), y=y_pred, marker="o", palette=colors, label="Predicted Rainfall", ax=ax)
-        ax.set_title("Predicted Rainfall Over Time")
-        ax.set_xlabel("Data Point Index")
-        ax.set_ylabel("Rainfall (mm)")
-        ax.grid(True)
-        st.pyplot(fig)
+            # Color by intensity
+            for i, rain in enumerate(y_pred):
+                color = '#90ee90' if rain < 20 else '#f4d03f' if rain < 50 else '#e74c3c'
+                ax.scatter(i, rain, color=color)
 
-        # Explanation
-        st.markdown("""
-        **🧠 Graph Explanation:**  
-        - This line shows the predicted rainfall in millimeters for each input row.  
-        - 🔵 Blue/green dots indicate low rainfall (safe weather).  
-        - 🟡 Yellow shows moderate rainfall warning.  
-        - 🔴 Red signals heavy rainfall alerts — potential for floods or travel disruptions.  
-        """)
+            ax.set_title("Predicted Rainfall Over Time")
+            ax.set_xlabel("Data Point Index")
+            ax.set_ylabel("Rainfall (mm)")
+            ax.grid(True)
+            st.pyplot(fig)
 
-        # Optional: If actual values present
-        if "Actual_Rainfall" in df.columns:
-            st.subheader("📉 Actual vs Predicted Rainfall")
-            fig2, ax2 = plt.subplots(figsize=(12, 4))
-            ax2.plot(df["Actual_Rainfall"].values, label="Actual", linestyle='--', marker='o')
-            ax2.plot(df["Predicted_Rainfall"].values, label="Predicted", linestyle='-', marker='x')
-            ax2.set_title("Actual vs Predicted Rainfall")
-            ax2.set_xlabel("Data Point Index")
-            ax2.set_ylabel("Rainfall (mm)")
-            ax2.legend()
-            ax2.grid(True)
-            st.pyplot(fig2)
+            # Explanation
+            st.markdown("""
+            **🧠 Graph Explanation:**  
+            - This line shows the predicted rainfall in millimeters for each input row.  
+            - 🟢 Green: Light rainfall  
+            - 🟡 Yellow: Moderate rainfall  
+            - 🔴 Red: Heavy rainfall (watch out!)  
+            """)
 
-        # Downloadable predictions
-        st.subheader("📥 Download Predictions")
-        csv = df.to_csv(index=False)
-        st.download_button("Download CSV with Predictions", csv, "predicted_rainfall.csv", "text/csv")
+            # Optional: Compare with actual
+            if "Actual_Rainfall" in df.columns:
+                st.subheader("📉 Actual vs Predicted Rainfall")
+                fig2, ax2 = plt.subplots(figsize=(12, 4))
+                ax2.plot(df["Actual_Rainfall"].values, label="Actual", linestyle='--', marker='o')
+                ax2.plot(df["Predicted_Rainfall"].values, label="Predicted", linestyle='-', marker='x')
+                ax2.set_title("Actual vs Predicted Rainfall")
+                ax2.set_xlabel("Data Point Index")
+                ax2.set_ylabel("Rainfall (mm)")
+                ax2.legend()
+                ax2.grid(True)
+                st.pyplot(fig2)
+
+            # Download
+            csv = df.to_csv(index=False)
+            st.download_button("📥 Download CSV with Predictions", csv, "predicted_rainfall.csv", "text/csv")
+
+        except Exception as e:
+            st.error(f"Something went wrong: {e}")
+
+
