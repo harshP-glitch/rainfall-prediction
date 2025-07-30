@@ -11,14 +11,14 @@ import pandas as pd
 import numpy as np
 from tensorflow.keras.models import load_model
 import joblib
-import matplotlib.pyplot as plt
-import seaborn as sns
 from datetime import datetime
+import plotly.express as px
+import plotly.graph_objects as go
 
-# --------------------- Title ---------------------
-st.set_page_config(page_title="Rainfall Prediction", layout="centered")
+# --------------------- Page Config ---------------------
+st.set_page_config(page_title="Rainfall Prediction", layout="wide")
 st.title("🌧️ Rainfall Prediction using LSTM")
-st.markdown("Upload recent weather data (CSV format) to predict upcoming rainfall.")
+st.markdown("Upload recent weather data (CSV format) to predict upcoming rainfall with interactive visualization.")
 
 # --------------------- Load model and preprocessors ---------------------
 @st.cache_resource
@@ -31,20 +31,18 @@ def load_all_components():
 
 model, feature_scaler, target_scaler, features = load_all_components()
 
-# --------------------- Upload file ---------------------
+# --------------------- File Upload ---------------------
 uploaded_file = st.file_uploader("📁 Upload your CSV", type="csv")
 
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
 
-    # Convert 'date' to datetime if present
     if 'date' in df.columns:
         df['date'] = pd.to_datetime(df['date'])
         df.set_index('date', inplace=True)
     else:
         df.index = pd.date_range(start=datetime.today(), periods=len(df), freq='D')
 
-    # Ensure numerical columns are correct dtype
     for col in ['rainfall', 'humidity', 'windspeed', 'temparature', 'cloud']:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce')
@@ -56,17 +54,15 @@ if uploaded_file:
     df["humidity_lag_1"] = df["humidity"].shift(1)
     df["windspeed_lag_1"] = df["windspeed"].shift(1)
     df["temparature_lag_1"] = df["temparature"].shift(1)
-
     df["rainfall_rolling_3"] = df["rainfall"].rolling(window=3).mean()
     df["humidity_rolling_3"] = df["humidity"].rolling(window=3).mean()
     df["cloud_rolling_3"] = df["cloud"].rolling(window=3).mean()
-
     df["month"] = df.index.month
     df["dayofweek"] = df.index.dayofweek
 
     df.dropna(inplace=True)
 
-    # --------------------- Feature Selection ---------------------
+    # --------------------- Predict ---------------------
     missing_cols = [col for col in features if col not in df.columns]
     if missing_cols:
         st.error(f"Missing required columns after feature engineering: {missing_cols}")
@@ -75,50 +71,48 @@ if uploaded_file:
         X_scaled = feature_scaler.transform(X)
         y_pred_scaled = model.predict(X_scaled)
         y_pred = target_scaler.inverse_transform(y_pred_scaled).flatten()
-
         df["Predicted_Rainfall"] = y_pred
 
-        # --------------------- Results Table ---------------------
-        st.subheader("📊 Predicted Rainfall Data (first 20 rows)")
-        st.dataframe(df[features + ["Predicted_Rainfall"]].head(20))
+        # --------------------- Interactive Visualization ---------------------
+        st.subheader("📈 Interactive Rainfall Prediction Chart")
+        df['Date'] = df.index
+        fig = px.scatter(df, x='Date', y='Predicted_Rainfall', color='Predicted_Rainfall',
+                         color_continuous_scale='Bluered_r',
+                         hover_data=features + ['Predicted_Rainfall'],
+                         title="Rainfall Prediction with Drilldown Tooltips")
+        fig.update_traces(mode='markers+lines')
+        fig.update_layout(hovermode="x unified")
+        st.plotly_chart(fig, use_container_width=True)
 
-        # --------------------- Visualization ---------------------
-        st.subheader("📈 Rainfall Prediction Trend")
-        fig, ax = plt.subplots(figsize=(12, 5))
-        colors = ['#90ee90' if r < 20 else '#f4d03f' if r < 50 else '#e74c3c' for r in y_pred]
-        sns.lineplot(x=np.arange(len(y_pred)), y=y_pred, marker="o", color='blue', ax=ax)
-        ax.set_title("Predicted Rainfall Over Time")
-        ax.set_xlabel("Data Point Index")
-        ax.set_ylabel("Rainfall (mm)")
-        ax.grid(True)
-        st.pyplot(fig)
-
-        # Explanation
-        st.markdown("""
-        **🧠 Graph Explanation:**  
-        - Green: Light Rain  
-        - Yellow: Moderate Rain  
-        - Red: Heavy Rain  
-        """)
-
-        # Actual vs Predicted (Optional)
+        # --------------------- Optional: Actual vs Predicted ---------------------
         if "Actual_Rainfall" in df.columns:
             st.subheader("📉 Actual vs Predicted Rainfall")
-            fig2, ax2 = plt.subplots(figsize=(12, 4))
-            ax2.plot(df["Actual_Rainfall"].values, label="Actual", linestyle='--', marker='o')
-            ax2.plot(df["Predicted_Rainfall"].values, label="Predicted", linestyle='-', marker='x')
-            ax2.set_title("Actual vs Predicted Rainfall")
-            ax2.set_xlabel("Data Point Index")
-            ax2.set_ylabel("Rainfall (mm)")
-            ax2.legend()
-            ax2.grid(True)
-            st.pyplot(fig2)
+            comp_fig = go.Figure()
+            comp_fig.add_trace(go.Scatter(x=df.index, y=df['Actual_Rainfall'],
+                                          mode='lines+markers', name='Actual'))
+            comp_fig.add_trace(go.Scatter(x=df.index, y=df['Predicted_Rainfall'],
+                                          mode='lines+markers', name='Predicted'))
+            comp_fig.update_layout(title="Actual vs Predicted Rainfall",
+                                   xaxis_title="Date", yaxis_title="Rainfall (mm)",
+                                   legend=dict(x=0, y=1))
+            st.plotly_chart(comp_fig, use_container_width=True)
 
-        # Download predictions
+        # --------------------- Future Forecast Placeholder ---------------------
+        st.subheader("🔮 Future Forecasting (Simulated Extension)")
+        future_days = st.slider("Select number of days to forecast ahead:", 7, 90, 30)
+
+        if future_days:
+            future_dates = pd.date_range(start=df.index[-1] + pd.Timedelta(days=1), periods=future_days)
+            future_df = pd.DataFrame(index=future_dates)
+            future_df['Predicted_Rainfall'] = np.random.normal(loc=y_pred.mean(), scale=y_pred.std(), size=future_days)
+
+            forecast_fig = px.line(future_df, y="Predicted_Rainfall", labels={"index": "Future Date"},
+                                   title=f"Projected Rainfall for Next {future_days} Days")
+            st.plotly_chart(forecast_fig, use_container_width=True)
+
+        # --------------------- Download ---------------------
         st.subheader("📥 Download Predictions")
-        st.download_button(
-            label="Download CSV with Predictions",
-            data=df.to_csv(index=False),
-            file_name="predicted_rainfall.csv",
-            mime="text/csv"
-        )
+        st.download_button("Download CSV with Predictions",
+                           data=df.to_csv(),
+                           file_name="predicted_rainfall.csv",
+                           mime="text/csv")
