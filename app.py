@@ -9,81 +9,59 @@ Original file is located at
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
-import joblib
-from keras.models import load_model
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-# Load assets
-model = load_model('rainfall.h5')
-feature_scaler = joblib.load('feature_scaler.pkl')
-target_scaler = joblib.load('target_scaler (1).pkl')
-features = joblib.load('features.pkl')
-data = pd.read_csv('Corrected_Rainfall - Corrected_Rainfall.csv.csv')
+# Title
+st.title("Rainfall Prediction Dashboard")
 
-# UI Header
-st.title("🌧️ Rainfall Prediction Dashboard")
-st.markdown("Analyze historical rainfall data and explore future forecasts interactively.")
+# Load the dataset
+uploaded_file = st.file_uploader("Upload your CSV dataset", type=["csv"])
+if uploaded_file is not None:
+    data = pd.read_csv(uploaded_file)
 
-# User input
-st.sidebar.header("🔍 Forecast Parameters")
+    st.subheader("Raw Dataset Preview")
+    st.dataframe(data.head())
 
-months = st.sidebar.slider("Months to Predict", min_value=1, max_value=24, value=6)
+    # Show summary
+    st.subheader("Statistical Summary")
+    st.write(data.describe())
 
-# Filter data
+    # Variability / Standard Deviation
+    st.subheader("Variability (Standard Deviation)")
+    std_dev = data.std(numeric_only=True)
+    st.write(std_dev)
 
+    # Line Chart of Rainfall over Time
+    if 'Date' in data.columns and 'Rainfall' in data.columns:
+        data['Date'] = pd.to_datetime(data['Date'], errors='coerce')
+        data = data.dropna(subset=['Date'])
+        data = data.sort_values('Date')
 
-# Display historical data
-st.subheader(f"📊 Historical Rainfall in {city}")
-fig_hist = px.line(city_data, x='Date', y='Rainfall', title='Historical Rainfall',
-                   labels={'Rainfall': 'Rainfall (mm)'})
-st.plotly_chart(fig_hist, use_container_width=True)
+        st.subheader("Rainfall Over Time")
+        st.line_chart(data.set_index('Date')['Rainfall'])
 
-# Prepare features for prediction
-X = city_data[features].values
-timesteps = 60
-X_seq = []
-for i in range(timesteps, len(X)):
-    X_seq.append(X[i - timesteps:i])
+    # Histogram of Rainfall
+    st.subheader("Rainfall Distribution")
+    fig, ax = plt.subplots()
+    sns.histplot(data['Rainfall'], bins=30, kde=True, ax=ax)
+    ax.set_xlabel("Rainfall (mm)")
+    ax.set_ylabel("Frequency")
+    st.pyplot(fig)
 
-X_seq = np.array(X_seq)
-X_scaled = feature_scaler.transform(X.reshape(-1, X.shape[-1])).reshape(X.shape)
+    # Boxplot to show variability
+    st.subheader("Rainfall Variability - Boxplot")
+    fig2, ax2 = plt.subplots()
+    sns.boxplot(y=data["Rainfall"], ax=ax2)
+    st.pyplot(fig2)
 
-# Predict future
-future_input = X_scaled[-timesteps:].reshape(1, timesteps, -1)
-predictions = []
+    # Correlation Heatmap (if other numeric columns exist)
+    numeric_cols = data.select_dtypes(include=np.number)
+    if len(numeric_cols.columns) > 1:
+        st.subheader("Correlation Heatmap")
+        fig3, ax3 = plt.subplots()
+        sns.heatmap(numeric_cols.corr(), annot=True, cmap='coolwarm', ax=ax3)
+        st.pyplot(fig3)
 
-for _ in range(months):
-    pred = model.predict(future_input)[0]
-    predictions.append(pred)
-    new_input = np.append(future_input[0][1:], [pred], axis=0)
-    future_input = new_input.reshape(1, timesteps, -1)
-
-# Inverse scale
-rainfall_pred = target_scaler.inverse_transform(np.array(predictions))
-
-# Future dates
-last_date = pd.to_datetime(city_data['Date'].iloc[-1])
-future_dates = pd.date_range(start=last_date + pd.Timedelta(days=30), periods=months, freq='M')
-
-# Dataframe for display
-forecast_df = pd.DataFrame({
-    'Date': future_dates,
-    'Predicted Rainfall': rainfall_pred.flatten()
-})
-
-# Show prediction chart
-st.subheader("📈 Forecasted Rainfall")
-fig_pred = go.Figure()
-fig_pred.add_trace(go.Scatter(x=forecast_df['Date'], y=forecast_df['Predicted Rainfall'],
-                              mode='lines+markers', name='Prediction',
-                              hovertemplate='Date: %{x}<br>Predicted Rainfall: %{y:.2f} mm'))
-fig_pred.update_layout(title="Future Rainfall Prediction",
-                       xaxis_title="Date",
-                       yaxis_title="Predicted Rainfall (mm)",
-                       hovermode='x')
-st.plotly_chart(fig_pred, use_container_width=True)
-
-# Drilldown Table
-with st.expander("🔎 View Forecast Table"):
-    st.dataframe(forecast_df.style.format({"Predicted Rainfall": "{:.2f}"}))
+else:
+    st.warning("Please upload a CSV file to begin.")
