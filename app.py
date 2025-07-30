@@ -39,12 +39,12 @@ if uploaded_file is not None:
         data = data.sort_values('Date')
 
         st.subheader("Rainfall Over Time")
-        st.line_chart(data.set_index('Date')['Rainfall'])
+        st.line_chart(data.set_index('Date')['rainfall'])
 
     # Histogram of Rainfall
     st.subheader("Rainfall Distribution")
     fig, ax = plt.subplots()
-    sns.histplot(data['Rainfall'], bins=30, kde=True, ax=ax)
+    sns.histplot(data['rainfall'], bins=30, kde=True, ax=ax)
     ax.set_xlabel("Rainfall (mm)")
     ax.set_ylabel("Frequency")
     st.pyplot(fig)
@@ -52,7 +52,7 @@ if uploaded_file is not None:
     # Boxplot to show variability
     st.subheader("Rainfall Variability - Boxplot")
     fig2, ax2 = plt.subplots()
-    sns.boxplot(y=data["Rainfall"], ax=ax2)
+    sns.boxplot(y=data["rainfall"], ax=ax2)
     st.pyplot(fig2)
 
     # Correlation Heatmap (if other numeric columns exist)
